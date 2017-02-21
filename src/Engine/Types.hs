@@ -1,5 +1,6 @@
 module Engine.Types where
 
+import Data.Matrix
 import Numeric.Natural
 
 type ID = String
@@ -16,7 +17,20 @@ data NPC = NPC {
     npcLocation :: Cell
     }
 
-type Level =  [Cell]
+type Level =  Matrix LevelPart
+data LevelPart 
+    = HWall
+    | Door
+    | VWall
+    | Floor
+    deriving (Eq)
+
+instance Show LevelPart where
+    show HWall = "_"
+    show Door = "/"
+    show VWall = "|"
+    show Floor = " "
+
 
 type Range = (Natural, Natural)
 
@@ -31,7 +45,7 @@ data GameState = GameState {
     npcs :: [NPC]
     }
 
-type Cell = (Natural, Natural)
+type Cell = (Int, Int)
 
 data PlayerState = PlayerState {
     playerName:: String,
