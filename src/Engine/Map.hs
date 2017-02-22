@@ -10,6 +10,7 @@ import Engine.Types
 
 import Control.Monad (foldM)
 import Data.Matrix hiding (trace)
+import Data.Maybe (fromMaybe, maybe)
 import System.Random
 
 import Debug.Trace
@@ -69,7 +70,7 @@ makeLevel = do
     roomCount <- randomR' (6,17) :: MapM Int
     rooms <- traverse (const makeRoom) [0..roomCount]
     emptyLvl <- newLevel
-    let lvl = foldl (\l r-> if checkRoom r l then reifyRoom r l else l) emptyLvl (trace (show rooms) rooms)
+    let lvl = foldl (\l r-> if checkRoom r l then reifyRoom r l else tryShiftRoom r l) emptyLvl (trace (show rooms) rooms)
     pure lvl
     where
     checkRoom (ArbRoom (x,y) (x',y') _) l = let
@@ -77,10 +78,19 @@ makeLevel = do
         b = all (== Floor) . V.take (x' - x) . V.drop x $ getRow y' l
         c = all (== Floor) . V.take (y' - y) . V.drop y $ getCol x l
         d = all (== Floor) . V.take (y' - y) . V.drop y $ getCol x' l
-        in a && b && c && d
+        in inBounds x xMin xMax && 
+           inBounds x' xMin xMax &&
+           inBounds y yMin yMax &&
+           inBounds y' yMin yMax &&
+             a && b && c && d
+    tryShiftRoom r l = case filter (`checkRoom` l) rs of
+        [] -> l
+        (x:xs) -> reifyRoom x l
+        where
+        rs = roomShifts r
     reifyRoom (ArbRoom (x,y) (x',y') _) l = let
-        l' = foldl (flip (setElem HWall)) l [(b,a)| a <- [x..x'], b <- [y, y']]
-        in foldl (flip (setElem VWall)) l' [(a, b)| a <- [y..y'], b <- [x, x']]
+        l' = foldl (\ac i -> fromMaybe ac $ safeSet HWall i ac) l [(b,a)| a <- [x..x'], b <- [y, y']]
+        in foldl (\ac i -> fromMaybe ac $ safeSet VWall i ac) l' [(a, b)| a <- [y..y'], b <- [x, x']]
 
 makeRoom :: MapM Room
 makeRoom = do
@@ -89,3 +99,12 @@ makeRoom = do
     ux <- randomR' (lx + roomMinWidth, lx + roomMaxWidth)
     uy <- randomR' (ly + roomMinHeight, ly + roomMaxHeight)
     pure $ ArbRoom (lx, ly) (ux, uy) []
+
+roomShifts :: Room -> [Room]
+roomShifts (ArbRoom (x,y) (x',y') _) = let
+    width = x' - x
+    height = y' - y 
+    in [ArbRoom (a,b) (a+width, b + height) [] | a <- [x - 10.. x + 10], b <- [y - 10.. y + 10]]
+        
+inBounds :: Int -> Int -> Int -> Bool
+inBounds x low high = x >= low && x <= high
