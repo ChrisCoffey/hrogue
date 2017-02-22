@@ -31,7 +31,6 @@ instance Show LevelPart where
     show VWall = "|"
     show Floor = " "
 
-
 type Range = (Natural, Natural)
 
 data Game = Game {

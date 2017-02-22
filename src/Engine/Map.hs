@@ -1,4 +1,5 @@
 module Engine.Map (
+    MapM (..),
     makeMap,
     makeLevel
 ) where
@@ -8,8 +9,10 @@ import qualified Data.Vector as V
 import Engine.Types
 
 import Control.Monad (foldM)
-import Data.Matrix
+import Data.Matrix hiding (trace)
 import System.Random
+
+import Debug.Trace
 
 -- Grid is 100x160
 xMin, xMax, roomMinWidth, roomMaxWidth, yMin, yMax, roomMinHeight, roomMaxHeight :: Int
@@ -52,9 +55,10 @@ randomR' :: (Random a, Num a) => (a, a) -> MapM a
 randomR' xs = MapM $ \s -> randomR xs s
 
 data Room = ArbRoom {ll:: Cell, ur:: Cell, doors:: [Cell]} 
+    deriving Show
 
 newLevel :: MapM Level
-newLevel = pure . matrix xMax yMax $ const Floor
+newLevel = pure . matrix yMax xMax $ const Floor
 
 makeMap :: StdGen -> [Level]
 makeMap g = fst $ m g
@@ -65,7 +69,7 @@ makeLevel = do
     roomCount <- randomR' (6,17) :: MapM Int
     rooms <- traverse (const makeRoom) [0..roomCount]
     emptyLvl <- newLevel
-    let lvl = foldl (\l r-> if checkRoom r l then reifyRoom r l else l) emptyLvl rooms
+    let lvl = foldl (\l r-> if checkRoom r l then reifyRoom r l else l) emptyLvl (trace (show rooms) rooms)
     pure lvl
     where
     checkRoom (ArbRoom (x,y) (x',y') _) l = let
@@ -75,13 +79,13 @@ makeLevel = do
         d = all (== Floor) . V.take (y' - y) . V.drop y $ getCol x' l
         in a && b && c && d
     reifyRoom (ArbRoom (x,y) (x',y') _) l = let
-        l' = foldl (flip (setElem HWall)) l [(a,b)| a <- [x..x'], b <- [y, y']]
-        in foldl (flip (setElem VWall)) l' [(b, a)| a <- [y..y'], b <- [x, x']]
+        l' = foldl (flip (setElem HWall)) l [(b,a)| a <- [x..x'], b <- [y, y']]
+        in foldl (flip (setElem VWall)) l' [(a, b)| a <- [y..y'], b <- [x, x']]
 
 makeRoom :: MapM Room
 makeRoom = do
     lx <- randomR' (xMin, xMax - roomMaxWidth) 
     ly <- randomR' (yMin, yMax - roomMaxHeight)
-    ux <- randomR' (lx, lx + roomMaxWidth)
-    uy <- randomR' (ly, ly + roomMaxHeight)
+    ux <- randomR' (lx + roomMinWidth, lx + roomMaxWidth)
+    uy <- randomR' (ly + roomMinHeight, ly + roomMaxHeight)
     pure $ ArbRoom (lx, ly) (ux, uy) []
