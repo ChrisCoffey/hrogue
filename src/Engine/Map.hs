@@ -9,8 +9,10 @@ import qualified Data.Vector as V
 import Engine.Types
 
 import Control.Monad (foldM)
+import Data.Monoid ((<>))
 import Data.Matrix hiding (trace)
 import Data.Maybe (fromMaybe, maybe)
+import Numeric.Natural
 import System.Random
 
 import Debug.Trace
@@ -55,6 +57,16 @@ random' = MapM $ \s -> random s
 randomR' :: (Random a, Num a) => (a, a) -> MapM a
 randomR' xs = MapM $ \s -> randomR xs s
 
+chooseN :: Natural -> [a] -> MapM [a]
+chooseN 0 _ = pure []
+chooseN n ls = do
+    ix <- randomR' (0, length ls - 1)
+    let (a, b:rest) = splitAt ix ls
+    (b:) <$> chooseN (n-1) (a<>rest)
+
+shuffle :: [a] -> MapM [a]
+shuffle ls = chooseN (fromIntegral $ length ls) ls
+
 data Room = ArbRoom {ll:: Cell, ur:: Cell, doors:: [Cell]} 
     deriving Show
 
@@ -70,8 +82,10 @@ makeLevel = do
     roomCount <- randomR' (6,17) :: MapM Int
     rooms <- traverse (const makeRoom) [0..roomCount]
     emptyLvl <- newLevel
-    let lvl = foldl (\l r-> if checkRoom r l then reifyRoom r l else tryShiftRoom r l) emptyLvl (trace (show rooms) rooms)
-    pure lvl
+    let (passingRooms, lvl) = foldl (\ (rs,l) r -> if checkRoom r l then (r:rs, reifyRoom r l) else tryShiftRoom r (rs,l)) 
+                                    ([], emptyLvl) 
+                                    rooms
+    hallways passingRooms lvl
     where
     checkRoom (ArbRoom (x,y) (x',y') _) l = let
         a = all (== Floor) . V.take (x' - x) . V.drop x $ getRow y l
@@ -83,9 +97,9 @@ makeLevel = do
            inBounds y yMin yMax &&
            inBounds y' yMin yMax &&
              a && b && c && d
-    tryShiftRoom r l = case filter (`checkRoom` l) rs of
-        [] -> l
-        (x:xs) -> reifyRoom x l
+    tryShiftRoom r (xs, l) = case filter (`checkRoom` l) rs of
+        [] -> (xs, l)
+        (x:_) -> (x:xs, reifyRoom x l)
         where
         rs = roomShifts r
     reifyRoom (ArbRoom (x,y) (x',y') _) l = let
@@ -105,6 +119,43 @@ roomShifts (ArbRoom (x,y) (x',y') _) = let
     width = x' - x
     height = y' - y 
     in [ArbRoom (a,b) (a+width, b + height) [] | a <- [x - 10.. x + 10], b <- [y - 10.. y + 10]]
-        
+      
+hallways :: [Room] -> Level -> MapM Level
+hallways rooms level = do
+    rooms' <- shuffle rooms
+    let connections = zip rooms' (tail rooms')
+    foldM (uncurry . makeHallway) level connections
+  
+-- This is the simplest approach. Can add in better edge matching & stuff later
+makeHallway :: 
+    Level -> 
+    Room -> 
+    Room ->
+    MapM Level
+makeHallway l origin end = let
+    vd = signum (ey - oy)
+    hd = signum (ex - ox)
+    vs = [ey, (ey - vd).. oy]
+    vertical = if vd == 0 
+               then [] 
+               else [(x, y) | y <- vs, x <- [ex + 1, ex -1]]
+    horizontal = if hd == 0 
+                 then [] 
+                 else [(x, y)| x <- [ex, (ex-hd) .. ox], y <- [oy + 1, oy - 1]]
+    l' = drawPath (trace (show vertical) vertical) l True False
+    in pure $ drawPath horizontal l' False False
+    where
+    ey = snd $ ll end
+    oy = snd $ ll origin
+    ex = fst $ ll end
+    ox = fst $ ll origin
+    drawPath p l vertical inRoom
+        | vertical = foldl (\ac i -> fromMaybe ac $ safeSet HWall i ac) l p
+        | otherwise = foldl (\ac i -> fromMaybe ac $ safeSet VWall i ac) l p
+    inStart (x,y) = (fst $ ll origin) < x && x < (fst $ ur origin) &&
+                    (snd $ ll origin) < y && y < (snd $ ur origin)
+
 inBounds :: Int -> Int -> Int -> Bool
 inBounds x low high = x >= low && x <= high
+
+
