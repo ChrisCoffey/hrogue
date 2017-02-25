@@ -19,11 +19,11 @@ import Debug.Trace
 
 -- Grid is 100x160
 xMin, xMax, roomMinWidth, roomMaxWidth, yMin, yMax, roomMinHeight, roomMaxHeight :: Int
-xMin = 0
+xMin = 1
 xMax = 160
 roomMinWidth = 6
 roomMaxWidth = 50
-yMin = 0
+yMin = 1 
 yMax = 100
 roomMinHeight = 6
 roomMaxHeight = 40
@@ -51,7 +51,7 @@ instance Monad MapM where
 get :: MapM StdGen 
 get = MapM $ \s -> (s,s)
 
-random' :: (Random a, Num a) => MapM a
+random' :: (Random a) => MapM a
 random' = MapM $ \s -> random s
 
 randomR' :: (Random a, Num a) => (a, a) -> MapM a
@@ -70,6 +70,8 @@ shuffle ls = chooseN (fromIntegral $ length ls) ls
 data Room = ArbRoom {ll:: Cell, ur:: Cell, doors:: [Cell]} 
     deriving Show
 
+data Path = Path {trail :: [Cell]}
+
 newLevel :: MapM Level
 newLevel = pure . matrix yMax xMax $ const Floor
 
@@ -79,13 +81,14 @@ makeMap g = fst $ m g
 
 makeLevel :: MapM Level
 makeLevel = do
+    el <- newLevel
+    pl <- paths el
     roomCount <- randomR' (6,17) :: MapM Int
-    rooms <- traverse (const makeRoom) [0..roomCount]
-    emptyLvl <- newLevel
+    rooms <- traverse (const makeRoom) [1..roomCount]
     let (passingRooms, lvl) = foldl (\ (rs,l) r -> if checkRoom r l then (r:rs, reifyRoom r l) else tryShiftRoom r (rs,l)) 
-                                    ([], emptyLvl) 
+                                    ([], pl) 
                                     rooms
-    hallways passingRooms lvl
+    pure lvl
     where
     checkRoom (ArbRoom (x,y) (x',y') _) l = let
         a = all (== Floor) . V.take (x' - x) . V.drop x $ getRow y l
@@ -120,42 +123,34 @@ roomShifts (ArbRoom (x,y) (x',y') _) = let
     height = y' - y 
     in [ArbRoom (a,b) (a+width, b + height) [] | a <- [x - 10.. x + 10], b <- [y - 10.. y + 10]]
       
-hallways :: [Room] -> Level -> MapM Level
-hallways rooms level = do
-    rooms' <- shuffle rooms
-    let connections = zip rooms' (tail rooms')
-    foldM (uncurry . makeHallway) level connections
-  
--- This is the simplest approach. Can add in better edge matching & stuff later
-makeHallway :: 
-    Level -> 
-    Room -> 
-    Room ->
-    MapM Level
-makeHallway l origin end = let
-    vd = signum (ey - oy)
-    hd = signum (ex - ox)
-    vs = [ey, (ey - vd).. oy]
-    vertical = if vd == 0 
-               then [] 
-               else [(x, y) | y <- vs, x <- [ex + 1, ex -1]]
-    horizontal = if hd == 0 
-                 then [] 
-                 else [(x, y)| x <- [ex, (ex-hd) .. ox], y <- [oy + 1, oy - 1]]
-    l' = drawPath (trace (show vertical) vertical) l True False
-    in pure $ drawPath horizontal l' False False
+paths :: Level -> MapM Level
+paths l = do
+    pathCount <- randomR' (10, 30) :: MapM Int
+    foldM (\x _ -> makePath x) l [1..pathCount]
+
+makePath :: Level -> MapM Level
+makePath l = do
+    isVert <- random'
+    col <- randomR' (xMin + 1, xMax -1)
+    row <- randomR' (yMin + 1, yMax -1)
+    if isVert
+    then pure $ drawPath [((a, col-1), (a, col), (a, col+1)) | a <- [yMin + 1.. yMax -1]] False True
+    else pure $ drawPath [((row-1, a),(row, a), (row+1, a)) | a <- [xMin + 1.. xMax -1]] False False
     where
-    ey = snd $ ll end
-    oy = snd $ ll origin
-    ex = fst $ ll end
-    ox = fst $ ll origin
-    drawPath p l vertical inRoom
-        | vertical = foldl (\ac i -> fromMaybe ac $ safeSet HWall i ac) l p
-        | otherwise = foldl (\ac i -> fromMaybe ac $ safeSet VWall i ac) l p
-    inStart (x,y) = (fst $ ll origin) < x && x < (fst $ ur origin) &&
-                    (snd $ ll origin) < y && y < (snd $ ur origin)
+    drawPath p inside True = fst $ foldl (drawCell VWall) (l, False) p
+    drawPath p inside False = fst $ foldl (drawCell HWall) (l, False) p
+    drawCell w (lvl,inside) (l,i,r) = 
+        case lvl ! i of
+            Floor -> if inside 
+                     then (lvl, inside) 
+                     else let
+                        lvl' = fromMaybe lvl $ safeSet w l lvl
+                        in (fromMaybe lvl $ safeSet w r lvl', False)
+            HWall -> (fromMaybe lvl $ safeSet Door i lvl, not inside)
+            VWall -> (fromMaybe lvl $ safeSet Door i lvl, not inside)
+            _ -> if inside 
+                 then (lvl, False) 
+                 else (lvl, inside)
 
 inBounds :: Int -> Int -> Int -> Bool
 inBounds x low high = x >= low && x <= high
-
-

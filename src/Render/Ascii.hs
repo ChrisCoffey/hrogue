@@ -9,7 +9,7 @@ render :: Level -> IO ()
 render = mapM_ printLine . toLists
     where
     printLine = print . foldr f "" 
-    f HWall s = '_':s
-    f VWall s = '|':s
+    f HWall s = '.':s
+    f VWall s = '.':s
     f Door s = '/':s
     f Floor s = ' ':s
