@@ -23,6 +23,7 @@ data LevelPart
     | Door
     | VWall
     | Floor
+    | EmptySpace
     deriving (Eq)
 
 instance Show LevelPart where
