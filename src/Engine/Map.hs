@@ -20,11 +20,11 @@ import Debug.Trace
 -- Grid is 100x160
 xMin, xMax, roomMinWidth, roomMaxWidth, yMin, yMax, roomMinHeight, roomMaxHeight :: Int
 xMin = 1
-xMax = 200
+xMax = 100 
 roomMinWidth = 6
 roomMaxWidth = 50
 yMin = 1 
-yMax = 200
+yMax = 100
 roomMinHeight = 6
 roomMaxHeight = 40
 
@@ -80,7 +80,7 @@ makeMap g = fst $ m g
 makeLevel :: MapM Level
 makeLevel = do
     el <- newLevel
-    roomCount <- randomR' (6,17) :: MapM Int
+    roomCount <- randomR' (3,9) :: MapM Int
     rooms <- traverse (const makeRoom) [1..roomCount]
     let rl = foldl drawRoom el rooms
     paths rl
