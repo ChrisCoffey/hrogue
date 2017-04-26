@@ -137,3 +137,5 @@ makePath l = do
             HWall -> fromMaybe lvl $ safeSet Door i lvl
             VWall -> fromMaybe lvl $ safeSet Door i lvl
             _ -> lvl
+
+
