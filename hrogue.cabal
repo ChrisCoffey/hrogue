@@ -18,11 +18,15 @@ library
   exposed-modules:     Engine.Map
                      , Render.Ascii
   other-modules:       Engine.Loop,
-                       Engine.Types
+                       Engine.Types,
+                       Engine.Util,
+                       Engine.Level.Room
   build-depends:       base >= 4.7 && < 5
                      , random
                      , matrix
+                     , mtl
                      , vector
+                     , containers
   default-language:    Haskell2010
 
 executable hrogue-exe
